@@ -21,7 +21,10 @@ require (
 )
 
 replace (
+	github.com/metal3-io/baremetal-operator => github.com/openshift/baremetal-operator v0.0.0-20200715132148-0f91f62a41fe // Use OpenShift fork
 	k8s.io/api => k8s.io/api v0.0.0-20190712022805-31fe033ae6f9
 	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190711222657-391ed67afa7b
 	k8s.io/client-go => k8s.io/client-go v0.0.0-20190620085101-78d2af792bab
 )
+
+replace github.com/openshift/assisted-service => github.com/tsorya/assisted-service v0.0.0-20201004094145-80f5618790c7

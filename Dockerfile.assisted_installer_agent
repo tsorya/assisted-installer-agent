@@ -8,6 +8,6 @@ RUN microdnf install \
     # dhcp_lease_allocate
     dhclient \
     # logs_sender
-    tar && microdnf update systemd \
+    tar chrony grep && microdnf update systemd \
     && microdnf clean all
 ADD build/agent build/connectivity_check build/free_addresses build/inventory build/logs_sender build/dhcp_lease_allocate /usr/bin/
