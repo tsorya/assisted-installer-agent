@@ -3,15 +3,18 @@ export
 
 TAG := $(or $(TAG),latest)
 ASSISTED_INSTALLER_AGENT := $(or $(ASSISTED_INSTALLER_AGENT),quay.io/ocpmetal/assisted-installer-agent:$(TAG))
+ASSISTED_INSTALLER_AGENT_ARM := $(or $(ASSISTED_INSTALLER_AGENT_ARM),quay.io/ocpmetal/assisted-installer-agent-arm:$(TAG))
 
 export ROOT_DIR = $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 BIN = $(ROOT_DIR)/build
+BIN_ARM = $(PWD)/build/arm
 
 REPORTS ?= $(ROOT_DIR)/reports
 CI ?= false
 TEST_FORMAT ?= standard-verbose
 GOTEST_FLAGS = --format=$(TEST_FORMAT) -- -count=1 -cover -coverprofile=$(REPORTS)/$(TEST_SCENARIO)_coverage.out
 GINKGO_FLAGS = -ginkgo.focus="$(FOCUS)" -ginkgo.v -ginkgo.skip="$(SKIP)" -ginkgo.reportFile=./junit_$(TEST_SCENARIO)_test.xml
+GO_BUILD_ENV_PARAMS := $(or ${GO_BUILD_ENV_PARAMS})
 
 GIT_REVISION := $(shell git rev-parse HEAD)
 PUBLISH_TAG := $(or ${GIT_REVISION})
@@ -33,13 +36,25 @@ build: build-agent build-connectivity_check build-inventory build-free_addresses
 	   build-container_image_availability build-domain_resolution build-disk_speed_check
 
 build-%: $(BIN) src/$* #lint
-	CGO_ENABLED=0 go build -o $(BIN)/$* src/$*/main/main.go
+	${GO_BUILD_ENV_PARAMS} CGO_ENABLED=0 go build -o $(BIN)/$* src/$*/main/main.go
+
+build-arm: build-arm-agent build-arm-connectivity_check build-arm-inventory build-arm-free_addresses build-arm-logs_sender \
+           build-arm-dhcp_lease_allocate build-arm-apivip_check build-arm-next_step_runner build-arm-ntp_synchronizer \
+           build-arm-container_image_availability build-arm-domain_resolution build-arm-disk_speed_check
+
+build-arm-%: $(BIN_ARM) src/$* #lint
+	env GOOS=linux GOARCH=arm CGO_ENABLED=0 go build -o $(BIN_ARM)/$* src/$*/main/main.go
+
 
 build-image: unit-test
 	docker build ${CONTAINER_BUILD_PARAMS} -f Dockerfile.assisted_installer_agent . -t $(ASSISTED_INSTALLER_AGENT)
 
+build-image-arm:
+	docker buildx build --platform=linux/arm64 -f Dockerfile.assisted_installer_agent_arm . -t $(ASSISTED_INSTALLER_AGENT_ARM) --push
+
 push: build-image subsystem
 	docker push $(ASSISTED_INSTALLER_AGENT)
+
 
 _test: $(REPORTS)
 	gotestsum $(GOTEST_FLAGS) $(TEST) $(GINKGO_FLAGS) -timeout $(TIMEOUT) || ($(MAKE) _post_test && /bin/false)
@@ -77,6 +92,9 @@ $(REPORTS):
 
 $(BIN):
 	-mkdir -p $(BIN)
+
+$(BIN_ARM):
+	-mkdir -p $(BIN_ARM)
 
 define publish_image
         docker tag ${1} ${2}
