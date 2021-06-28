@@ -1,0 +1,39 @@
+FROM --platform=$BUILDPLATFORM golang:1.15 AS builder
+ARG TARGETPLATFORM
+
+ENV GO111MODULE=on
+ENV GOFLAGS=""
+
+WORKDIR /go/src/github.com/openshift/assisted-installer-agent
+
+COPY go.mod .
+RUN go mod download
+
+COPY . .
+
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then GO_BUILD_ENV_PARAMS="GOOS=linux GOARCH=arm64" make build;else make build; fi
+
+
+FROM --platform=$TARGETPLATFORM quay.io/centos/centos:centos8
+ARG URL=https://download-cc-rdu01.fedoraproject.org/pub/fedora/linux/releases/32/Everything/
+ARG TARGETPLATFORM
+
+RUN dnf install -y findutils iputils podman dmidecode ipmitool file fio nmap dhclient tar openssh-clients chrony && dnf update -y systemd && dnf clean all
+
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then dnf install -y $URL/aarch64/os/Packages/s/smartmontools-7.1-8.fc32.aarch64.rpm; \
+ else dnf install -y $URL/x86_64/os/Packages/s/smartmontools-7.1-8.fc32.x86_64.rpm; fi && dnf clean all
+
+COPY --from=builder /go/src/github.com/openshift/assisted-installer-agent/build/agent /usr/bin/agent
+COPY --from=builder /go/src/github.com/openshift/assisted-installer-agent/build/connectivity_check /usr/bin/connectivity_check
+COPY --from=builder /go/src/github.com/openshift/assisted-installer-agent/build/free_addresses /usr/bin/free_addresses
+COPY --from=builder /go/src/github.com/openshift/assisted-installer-agent/build/inventory /usr/bin/inventory
+COPY --from=builder /go/src/github.com/openshift/assisted-installer-agent/build/logs_sender /usr/bin/logs_sender
+COPY --from=builder /go/src/github.com/openshift/assisted-installer-agent/build/dhcp_lease_allocate /usr/bin/dhcp_lease_allocate
+COPY --from=builder /go/src/github.com/openshift/assisted-installer-agent/build/apivip_check /usr/bin/apivip_check
+COPY --from=builder /go/src/github.com/openshift/assisted-installer-agent/build/next_step_runner /usr/bin/next_step_runner
+COPY --from=builder /go/src/github.com/openshift/assisted-installer-agent/build/ntp_synchronizer /usr/bin/ntp_synchronizer
+COPY --from=builder /go/src/github.com/openshift/assisted-installer-agent/build/container_image_availability /usr/bin/container_image_availability
+COPY --from=builder /go/src/github.com/openshift/assisted-installer-agent/build/domain_resolution /usr/bin/domain_resolution
+COPY --from=builder /go/src/github.com/openshift/assisted-installer-agent/build/disk_speed_check /usr/bin/disk_speed_check
+
+COPY scripts/installer/* /usr/local/bin/
